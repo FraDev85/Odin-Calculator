@@ -8,16 +8,20 @@ const operators = document.querySelectorAll(".btnOperator");
 const equal = document.querySelector(".equal");
 let cleanZero = true;
 let dotUsed = false;
-let firstOperand = null;
-let currentOperator = null;
-let secondOperand = null;
 const maxLength = 13;
-let result = null;
+let expression = "";
+let justCalculated = false;
 
-//
-//
+// Numbers
 btn.forEach((button) => {
   button.addEventListener("click", () => {
+    if (justCalculated) {
+      expression = "";
+      previousDisplay.textContent = "";
+      justCalculated = false;
+      dotUsed = false;
+      cleanZero = false;
+    }
     if (cleanZero) {
       display.textContent = "";
       cleanZero = false;
@@ -25,95 +29,89 @@ btn.forEach((button) => {
     if (display.textContent.length < maxLength) {
       display.textContent += button.textContent;
     }
-    if (firstOperand !== null && currentOperator) {
-      secondOperand = parseFloat(display.textContent) || 0;
-    }
   });
 });
+
+//---------------------Reset----------------------------------------
 
 reset.addEventListener("click", () => {
   display.textContent = "0";
   previousDisplay.textContent = "";
+  expression = "";
   clean();
+  justCalculated = false;
 });
-
+//-------------------------------Delete-----------------------------------------
 del.addEventListener("click", () => {
+  if (justCalculated) return;
   display.textContent = display.textContent.slice(0, -1);
   if (!display.textContent.includes(".")) {
-    dot.disabled = false;
+    dotUsed = false;
   }
 
   if (display.textContent === "") {
     display.textContent = "0";
     cleanZero = true;
   }
-  if (firstOperand !== null && currentOperator) {
-    secondOperand = parseFloat(display.textContent) || 0;
-  }
 });
 
-function add(a, b) {
-  return a + b;
-}
-
-function multiply(a, b) {
-  return a * b;
-}
-
-function sub(a, b) {
-  return a - b;
-}
-
-function div(a, b) {
-  return a / b;
-}
+// --------------------Operators-----------------------------------------------------
 
 operators.forEach((opBtn) => {
   opBtn.addEventListener("click", () => {
-    handleOperatorClick(opBtn.textContent);
+    if (display.textContent === "Error") return reset.click();
+    if (opBtn.textContent === "=") return;
+    if (justCalculated) {
+      expression = display.textContent + opBtn.textContent;
+      justCalculated = false;
+    } else if (/[+\-*/]$/.test(expression)) {
+      expression = expression.slice(0, -1) + opBtn.textContent;
+    } else {
+      expression += display.textContent + opBtn.textContent;
+    }
+    previousDisplay.textContent = expression;
+    cleanZero = true;
+    dotUsed = false;
   });
 });
 
-equal.addEventListener("click", () => {
-  secondOperand = parseFloat(display.textContent);
-  if (firstOperand !== null && currentOperator) {
-    switch (currentOperator) {
-      case "+":
-        result = add(firstOperand, secondOperand);
-        break;
-      case "-":
-        result = sub(firstOperand, secondOperand);
-        break;
-      case "*":
-        result = multiply(firstOperand, secondOperand);
-        break;
-      case "/":
-        if (secondOperand === 0) {
-          previousDisplay.textContent = `${firstOperand} /  0`;
-          display.textContent = "NaN";
+//_____________________________Equal_________________________________________________
 
-          clean();
-          return;
-        }
-        result = div(firstOperand, secondOperand);
-        break;
+equal.addEventListener("click", () => {
+  try {
+    if (display.textContent === "Error") return reset.click();
+    let fullExpression;
+    if (!expression) {
+      previousDisplay.textContent = display.textContent + " =";
+      justCalculated = true;
+      return;
     }
 
-    previousDisplay.textContent = `${firstOperand} `;
-    display.textContent = Number(result.toFixed(10)).toString();
-    firstOperand = result;
-    currentOperator = null;
-    secondOperand = null;
+    if (/[+\-*/]$/.test(expression)) {
+      fullExpression = expression + display.textContent;
+    } else {
+      fullExpression = expression;
+    }
+
+    const result = safeEval(fullExpression);
+    display.textContent = formatResult(result);
+    previousDisplay.textContent = fullExpression + " =";
+    expression = "";
     cleanZero = true;
-    dotUsed = false;
+    dotUsed = display.textContent.includes(".");
+    justCalculated = true;
+  } catch (error) {
+    display.textContent = "Error";
+    expression = "";
+    justCalculated = false;
   }
 });
 
 dot.addEventListener("click", handleDotClick);
 
 function handleDotClick() {
-  if (!dotUsed && !display.textContent.includes(".")) {
-    if (cleanZero) {
+  if (!dotUsed) {
+    if (cleanZero || display.textContent === "") {
       display.textContent = "0.";
       cleanZero = false;
     } else {
@@ -124,52 +122,22 @@ function handleDotClick() {
   }
 }
 
-function handleOperatorClick(op) {
-  const currentValue = parseFloat(display.textContent);
+//__________________Helpers_____________________________________
 
-  if (firstOperand === null) {
-    firstOperand = currentValue;
-    currentOperator = op;
-    previousDisplay.textContent = `${firstOperand} ${currentOperator}`;
-    display.textContent = "0";
-    cleanZero = true;
-    dotUsed = false;
-  } else {
-    secondOperand = currentValue;
-    switch (currentOperator) {
-      case "+":
-        result = add(firstOperand, secondOperand);
-        break;
-      case "-":
-        result = sub(firstOperand, secondOperand);
-        break;
-      case "*":
-        result = multiply(firstOperand, secondOperand);
-        break;
-      case "/":
-        if (secondOperand === 0) {
-          previousDisplay.textContent = `${firstOperand} /  0`;
-          display.textContent = "NaN";
-
-          clean();
-          return;
-        }
-        result = div(firstOperand, secondOperand);
-        break;
-    }
-    previousDisplay.textContent = `${Number(result.toFixed(10))} ${op} `;
-    display.textContent = "";
-    firstOperand = result;
-    currentOperator = op;
-    cleanZero = true;
-    dotUsed = false;
+function safeEval(expression) {
+  if (!/^[0-9+\-*/.() ]+$/.test(expression)) {
+    throw new Error("Invalid expression");
   }
+  return Function('"use strict"; return (' + expression + ")")();
+}
+
+function formatResult(num) {
+  if (isNaN(num) || !isFinite(num)) return "NaN";
+  const str = Number(num.toFixed(10)).toString();
+  return str.length > maxLength ? parseFloat(str).toExponential(6) : str;
 }
 
 function clean() {
-  firstOperand = null;
-  secondOperand = null;
-  currentOperator = null;
   cleanZero = true;
   dotUsed = false;
 }
